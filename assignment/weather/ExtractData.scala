@@ -1,9 +1,9 @@
 package com.assignment.weather
 
-import scala.xml.XML
-import org.json4s.Xml.toJson
+import com.github.ivetan.Utilities
+import upickle.default
 
-import com.github.ivetan.Utilities.saveLines
+import scala.xml.XML
 
 object ExtractData extends App {
 
@@ -16,54 +16,71 @@ object ExtractData extends App {
   }
 
   val dataXML = XML.loadFile(dataPath)
-  val stationNodes = dataXML \ "country" \ "station"
+
+  case class Station(stationName: String, stationEUCode: String,
+                     stationLocalCode: String, stationDescription: String,
+                     stationNutsLevel0: String, stationNutsLevel1: Int,
+                     stationNutsLevel2: Int, stationNutsLevel3: Int,
+                     lauLevel1Code: String, lauLevel2Name: String,
+                     sabeCountryCode: String, sabeUnitCode: String, sabeUnitName: String,
+                     stationStartDate: String, stationLatitudeDecDegrees: Double,
+                     stationLongitudeDecDegrees: Double, stationLatitudeDms: String,
+                     stationLongitudeDms: String, stationAltitude: Int,
+                     typeOfStation: String, stationTypeOfArea: String,
+                     stationCharactOfZone: String, stationSubcRurBackg: String,
+                     monitoringObj: String, meteorologicalParameter: String
+                    )
+
+  implicit val fileRW: default.ReadWriter[Station] = upickle.default.macroRW[Station]
 
   def fromXMLtoFile(node: scala.xml.Node): Station = {
+    val stationInfo = node \ "station_info"
     Station(
-      stationName = (node \ "station_info" \ "station_name").text,
+      stationName = (stationInfo\ "station_name").text,
       stationEUCode = (node \ "station_european_code").text,
-      stationLocalCode = (node \ "station_local_code").text,
-      stationDescription = (node \ "station_description").text,
-      stationNutsLevel0 = (node \ "station_nuts_level0").toString.toInt,
-      stationNutsLevel1 = (node \ "station_nuts_level1").toString.toInt,
-      stationNutsLevel2 = (node \ "station_nuts_level2").toString.toInt,
-      stationNutsLevel3 = (node \ "station_nuts_level3").toString.toInt,
-      lauLevel1Code = (node \ "lau_level1_code").text,
-      lauLevel2Name = (node \ "lau_level2_name").text,
-      sabeCountryCode = (node \ "sabe_country_code").text,
-      sabeUnitCode = (node \ "sabe_unit_code").text,
-      sabeUnitName = (node \ "sabe_unit_name").text,
-      stationStartDate = (node \ "station_start_date").text,
-      stationLatitudeDecDegrees = (node \ "station_latitude_decimal_degrees").toString.toDouble,
-      stationLongitudeDecDegrees = (node \ "station_longitude_decimal_degrees").toString.toDouble,
-      stationLatitudeDms = (node \ "station_latitude_dms").text,
-      stationLongitudeDms = (node \ "station_longitude_dms").text,
-      stationAltitude = (node \ "station_altitude").toString().toInt,
-      typeOfStation = (node \ "type_of_station").text,
-      stationTypeOfArea = (node \ "station_type_of_area").text,
-      stationCharactOfZone = (node \ "station_characteristic_of_zone").text,
-      stationSubcRurBackg = (node \ " station_subcategory_rural_background").text,
-      monitoringObj = (node \ "monitoring_obj").text,
-      meteorologicalParameter = (node \ "meteorological_parameter").text
+      stationLocalCode = (stationInfo \ "station_local_code").text,
+      stationDescription = (stationInfo \ "station_description").text,
+      stationNutsLevel0 = (stationInfo \ "station_nuts_level0").text,
+      stationNutsLevel1 = (stationInfo \ "station_nuts_level1").text.toInt,
+      stationNutsLevel2 = (stationInfo \ "station_nuts_level2").text.toInt,
+      stationNutsLevel3 = (stationInfo \ "station_nuts_level3").text.toInt,
+      lauLevel1Code = (stationInfo \ "lau_level1_code").text,
+      lauLevel2Name = (stationInfo \ "lau_level2_name").text,
+      sabeCountryCode = (stationInfo \ "sabe_country_code").text,
+      sabeUnitCode = (stationInfo \ "sabe_unit_code").text,
+      sabeUnitName = (stationInfo \ "sabe_unit_name").text,
+      stationStartDate = (stationInfo \ "station_start_date").text,
+      stationLatitudeDecDegrees = (stationInfo \ "station_latitude_decimal_degrees").text.toDouble,
+      stationLongitudeDecDegrees = (stationInfo \ "station_longitude_decimal_degrees").text.toDouble,
+      stationLatitudeDms = (stationInfo \ "station_latitude_dms").text,
+      stationLongitudeDms = (stationInfo \ "station_longitude_dms").text,
+      stationAltitude = (stationInfo \ "station_altitude").text.toInt,
+      typeOfStation = (stationInfo \ "type_of_station").text,
+      stationTypeOfArea = (stationInfo \ "station_type_of_area").text,
+      stationCharactOfZone = (stationInfo \ "station_characteristic_of_zone").text,
+      stationSubcRurBackg = (stationInfo \ " station_subcategory_rural_background").text,
+      monitoringObj = (stationInfo \ "monitoring_obj").text,
+      meteorologicalParameter = (stationInfo \ "meteorological_parameter").text
 
     )
   }
 
+  val stationNodes = dataXML \ "country" \ "station"
   val stations = stationNodes.map(node => fromXMLtoFile(node))
 
   val destJSONFilePaths = stations.map(station => getFilePath(folderName, station.stationName, station.stationEUCode, prefix = "_meta", suffix = ".json"))
-  //destJSONFilePaths.foreach(println)
 
   val destTSVFilePaths = stations.map(station => getFilePath(folderName, station.stationName, station.stationEUCode, prefix = "_yearly", suffix = ".tsv"))
   //destTSVFilePaths.foreach(println)
 
-  val stationInfoNodes = dataXML \ "country" \ "station" \ "station_info"
-  val stationInfo = stationInfoNodes.map(node => toJson(node).toString)
+//  val station1 = stations(0)
+//  val dest1 = destJSONFilePaths(0)
 
-  saveLines(stationInfo.slice(0,1), destJSONFilePaths.head)
 
-  val station1 = stationInfo.slice(0,1)
+  for (i <- stations.indices) Utilities.saveString(upickle.default.write(stations(i), indent = 4), destJSONFilePaths(i))
 
+  val countryJson = upickle.default.write(stations, indent = 4)
+  Utilities.saveString(countryJson, folderName + "/stations_Estonia_meta.json" )
 
 
 
