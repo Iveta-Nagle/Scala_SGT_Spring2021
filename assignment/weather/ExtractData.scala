@@ -1,8 +1,11 @@
 package com.assignment.weather
 
 import com.github.ivetan.Utilities
+import kantan.csv.{HeaderEncoder, RowEncoder, rfc}
+import kantan.csv.ops.toCsvOutputOps
 import upickle.default
 
+import java.io.{File, PrintWriter}
 import scala.xml.XML
 
 object ExtractData extends App {
@@ -10,9 +13,9 @@ object ExtractData extends App {
   val folderName = "./src/resources"
   val dataPath = "./src/resources/EE_meta.xml"
 
-  def getFilePath(folderName: String, stationName: String, stationEUCode: String, prefix: String, suffix: String):String = {
+  def getFilePath(folderName: String, directory: String, stationName: String, stationEUCode: String, prefix: String, suffix: String):String = {
     val name = stationName + "_"
-    s"$folderName/$name$stationEUCode$prefix$suffix"
+    s"$folderName/$directory/$name$stationEUCode$prefix$suffix"
   }
 
   val dataXML = XML.loadFile(dataPath)
@@ -68,20 +71,48 @@ object ExtractData extends App {
   val stationNodes = dataXML \ "country" \ "station"
   val stations = stationNodes.map(node => fromXMLtoFile(node))
 
-  val destJSONFilePaths = stations.map(station => getFilePath(folderName, station.stationName, station.stationEUCode, prefix = "_meta", suffix = ".json"))
+  val destJSONFilePaths = stations.map(station => getFilePath(folderName, "json", station.stationName, station.stationEUCode, prefix = "_meta", suffix = ".json"))
 
-  val destTSVFilePaths = stations.map(station => getFilePath(folderName, station.stationName, station.stationEUCode, prefix = "_yearly", suffix = ".tsv"))
-  //destTSVFilePaths.foreach(println)
-
-//  val station1 = stations(0)
-//  val dest1 = destJSONFilePaths(0)
-
+  val destTSVFilePaths = stations.map(station => getFilePath(folderName, "csv", station.stationName, station.stationEUCode, prefix = "_yearly", suffix = ".csv"))
 
   for (i <- stations.indices) Utilities.saveString(upickle.default.write(stations(i), indent = 4), destJSONFilePaths(i))
 
   val countryJson = upickle.default.write(stations, indent = 4)
   Utilities.saveString(countryJson, folderName + "/stations_Estonia_meta.json" )
 
+  case class Measurement(componentName: String, componentCaption: String, measurementUnit: String, measurementTechniquePrinciple: String)
+                         //, year2005Mean : Double)
 
+  def getMeasurement(savedStrings: String, measurement: String): Double = {
+   val stringList = savedStrings.split("\n").map(_.trim).toList
+   val measurementNameIndex = stringList.indexOf(measurement)
+    stringList(measurementNameIndex+1).toDouble
+  }
+
+  def fromXMLtoMeasures(node: scala.xml.Node): Measurement = {
+    Measurement(
+      componentName = (node \ "component_name").text,
+      componentCaption = (node  \"component_caption").text,
+      measurementUnit = (node \"measurement_unit").text,
+      measurementTechniquePrinciple = (node \"measurement_info" \ "measurement_technique_principle").text,
+    )
+  }
+
+  implicit val measurementEncoder: HeaderEncoder[Measurement] = HeaderEncoder.caseEncoder("componentName",
+    "componentCaption", "measurementUnit", "measurementTechniquePrinciple")(Measurement.unapply)
+
+  def writeToCSV(stationMeasurements: Seq[Measurement], filePath: String) = {
+    val csvFile = new File(filePath)
+    val out = new PrintWriter(csvFile)
+    val writer = out.asCsvWriter[Measurement](rfc.withHeader("componentName", "componentCaption", "measurementUnit"
+      , "measurementTechniquePrinciple"))
+    writer.write(stationMeasurements).close()
+  }
+
+  for (i <- stations.indices) {
+    val station = stationNodes.filter(_ \ "@Id" exists (_.text.contains(stations(0).stationName))) \ "measurement_configuration"
+    val stationMeasurements = station.map(node => fromXMLtoMeasures(node))
+    writeToCSV(stationMeasurements,destTSVFilePaths(i))
+  }
 
 }
