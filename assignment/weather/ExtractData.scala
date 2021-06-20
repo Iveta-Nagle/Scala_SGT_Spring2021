@@ -80,37 +80,41 @@ object ExtractData extends App {
   val countryJson = upickle.default.write(stations, indent = 4)
   Utilities.saveString(countryJson, folderName + "/stations_Estonia_meta.json" )
 
-  case class Measurement(componentName: String, componentCaption: String, measurementUnit: String, measurementTechniquePrinciple: String)
-                         //, year2005Mean : Double)
+  case class Measurement(componentName: String, componentCaption: String, measurementUnit: String, measurementTechniquePrinciple: String
+                         , year2005Mean : String)
 
-  def getMeasurement(savedStrings: String, measurement: String): Double = {
+  def getMeasurement(savedStrings: String, measurement: String): String = {
    val stringList = savedStrings.split("\n").map(_.trim).toList
    val measurementNameIndex = stringList.indexOf(measurement)
-    stringList(measurementNameIndex+1).toDouble
+    stringList(measurementNameIndex+1)
   }
 
   def fromXMLtoMeasures(node: scala.xml.Node): Measurement = {
+    val year2005Results = (((node \ "statistics").
+      filter( _ \ "@Year" exists (_.text == "2005")) \ "statistics_average_group")
+      .filter( _ \ "@value" exists (_.text == "day")) \ "statistic_set" \ "statistic_result").text
     Measurement(
       componentName = (node \ "component_name").text,
       componentCaption = (node  \"component_caption").text,
       measurementUnit = (node \"measurement_unit").text,
       measurementTechniquePrinciple = (node \"measurement_info" \ "measurement_technique_principle").text,
+      year2005Mean = getMeasurement(year2005Results, "Mean")
     )
   }
 
   implicit val measurementEncoder: HeaderEncoder[Measurement] = HeaderEncoder.caseEncoder("componentName",
-    "componentCaption", "measurementUnit", "measurementTechniquePrinciple")(Measurement.unapply)
+    "componentCaption", "measurementUnit", "measurementTechniquePrinciple", "year2005Mean")(Measurement.unapply)
 
   def writeToCSV(stationMeasurements: Seq[Measurement], filePath: String) = {
     val csvFile = new File(filePath)
     val out = new PrintWriter(csvFile)
     val writer = out.asCsvWriter[Measurement](rfc.withHeader("componentName", "componentCaption", "measurementUnit"
-      , "measurementTechniquePrinciple"))
+      , "measurementTechniquePrinciple", "year2005Mean"))
     writer.write(stationMeasurements).close()
   }
 
   for (i <- stations.indices) {
-    val station = stationNodes.filter(_ \ "@Id" exists (_.text.contains(stations(0).stationName))) \ "measurement_configuration"
+    val station = stationNodes.filter(_ \ "@Id" exists (_.text.contains(stations(i).stationName))) \ "measurement_configuration"
     val stationMeasurements = station.map(node => fromXMLtoMeasures(node))
     writeToCSV(stationMeasurements,destTSVFilePaths(i))
   }
