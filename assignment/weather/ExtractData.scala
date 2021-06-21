@@ -1,7 +1,7 @@
 package com.assignment.weather
 
 import com.github.ivetan.Utilities
-import kantan.csv.{HeaderEncoder, RowEncoder, rfc}
+import kantan.csv.{CsvConfiguration, HeaderEncoder, RowEncoder, rfc}
 import kantan.csv.ops.toCsvOutputOps
 import upickle.default
 
@@ -107,14 +107,14 @@ object ExtractData extends App {
   /** Write measurement data in TSV files
    * Creates new TSV files
    */
-  def writeToCSV(stationMeasurements: Seq[Measurement], filePath: String) = {
+  def writeToTSV(stationMeasurements: Seq[Measurement], filePath: String) = {
     implicit val measurementEncoder: HeaderEncoder[Measurement] = HeaderEncoder.caseEncoder("componentName",
       "componentCaption", "measurementUnit", "measurementTechniquePrinciple"
       , "year2005Mean", "year2005Median")(Measurement.unapply)
     val csvFile = new File(filePath)
     val out = new PrintWriter(csvFile)
     val writer = out.asCsvWriter[Measurement](rfc.withHeader("componentName", "componentCaption", "measurementUnit"
-      , "measurementTechniquePrinciple", "year2005Mean(P50)"))
+      , "measurementTechniquePrinciple", "year2005Mean(P50)").withCellSeparator('\t'))
     writer.write(stationMeasurements).close()
   }
 
@@ -122,7 +122,7 @@ object ExtractData extends App {
   for (i <- stations.indices) {
     val station = stationNodes.filter(_ \ "@Id" exists (_.text.contains(stations(i).stationName))) \ "measurement_configuration"
     val stationMeasurements = station.map(node => fromXMLtoMeasures(node))
-    writeToCSV(stationMeasurements,destTSVFilePaths(i))
+    writeToTSV(stationMeasurements,destTSVFilePaths(i))
   }
 
 
