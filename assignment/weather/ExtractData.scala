@@ -36,6 +36,7 @@ object ExtractData extends App {
 
   implicit val fileRW: default.ReadWriter[Station] = upickle.default.macroRW[Station]
 
+  //FIXME if there are several meteorological parameter
   def fromXMLtoFile(node: scala.xml.Node): Station = {
     val stationInfo = node \ "station_info"
     Station(
@@ -64,7 +65,6 @@ object ExtractData extends App {
       stationSubcRurBackg = (stationInfo \ " station_subcategory_rural_background").text,
       monitoringObj = (stationInfo \ "monitoring_obj").text,
       meteorologicalParameter = (stationInfo \ "meteorological_parameter").text
-
     )
   }
 
@@ -81,7 +81,7 @@ object ExtractData extends App {
   Utilities.saveString(countryJson, folderName + "/stations_Estonia_meta.json" )
 
   case class Measurement(componentName: String, componentCaption: String, measurementUnit: String, measurementTechniquePrinciple: String
-                         , year2005Mean : String)
+                         , year2005Mean : String, year2005Median: String)
 
   def getMeasurement(savedStrings: String, measurement: String): String = {
    val stringList = savedStrings.split("\n").map(_.trim).toList
@@ -98,21 +98,29 @@ object ExtractData extends App {
       componentCaption = (node  \"component_caption").text,
       measurementUnit = (node \"measurement_unit").text,
       measurementTechniquePrinciple = (node \"measurement_info" \ "measurement_technique_principle").text,
-      year2005Mean = getMeasurement(year2005Results, "Mean")
+      year2005Mean = getMeasurement(year2005Results, "Mean"),
+      year2005Median = getMeasurement(year2005Results, "P50")
     )
   }
 
-  implicit val measurementEncoder: HeaderEncoder[Measurement] = HeaderEncoder.caseEncoder("componentName",
-    "componentCaption", "measurementUnit", "measurementTechniquePrinciple", "year2005Mean")(Measurement.unapply)
 
+
+  implicit val measurementEncoder: HeaderEncoder[Measurement] = HeaderEncoder.caseEncoder("componentName",
+    "componentCaption", "measurementUnit", "measurementTechniquePrinciple"
+    , "year2005Mean", "year2005Median")(Measurement.unapply)
+
+  /** Write measurement data in TSV files
+   * Creates new TSV files
+   */
   def writeToCSV(stationMeasurements: Seq[Measurement], filePath: String) = {
     val csvFile = new File(filePath)
     val out = new PrintWriter(csvFile)
     val writer = out.asCsvWriter[Measurement](rfc.withHeader("componentName", "componentCaption", "measurementUnit"
-      , "measurementTechniquePrinciple", "year2005Mean"))
+      , "measurementTechniquePrinciple", "year2005Mean(P50)"))
     writer.write(stationMeasurements).close()
   }
 
+  //
   for (i <- stations.indices) {
     val station = stationNodes.filter(_ \ "@Id" exists (_.text.contains(stations(i).stationName))) \ "measurement_configuration"
     val stationMeasurements = station.map(node => fromXMLtoMeasures(node))
