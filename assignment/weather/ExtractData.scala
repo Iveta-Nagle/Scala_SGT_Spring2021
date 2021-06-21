@@ -73,12 +73,12 @@ object ExtractData extends App {
 
   val destJSONFilePaths = stations.map(station => getFilePath(folderName, "json", station.stationName, station.stationEUCode, prefix = "_meta", suffix = ".json"))
 
-  val destTSVFilePaths = stations.map(station => getFilePath(folderName, "csv", station.stationName, station.stationEUCode, prefix = "_yearly", suffix = ".csv"))
+  val destTSVFilePaths = stations.map(station => getFilePath(folderName, "tsv", station.stationName, station.stationEUCode, prefix = "_yearly", suffix = ".tsv"))
 
   for (i <- stations.indices) Utilities.saveString(upickle.default.write(stations(i), indent = 4), destJSONFilePaths(i))
 
   val countryJson = upickle.default.write(stations, indent = 4)
-  Utilities.saveString(countryJson, folderName + "/stations_Estonia_meta.json" )
+  Utilities.saveString(countryJson, folderName + "/json/stations_Estonia_meta.json" )
 
   case class Measurement(componentName: String, componentCaption: String, measurementUnit: String, measurementTechniquePrinciple: String
                          , year2005Mean : String, year2005Median: String)
@@ -104,15 +104,13 @@ object ExtractData extends App {
   }
 
 
-
-  implicit val measurementEncoder: HeaderEncoder[Measurement] = HeaderEncoder.caseEncoder("componentName",
-    "componentCaption", "measurementUnit", "measurementTechniquePrinciple"
-    , "year2005Mean", "year2005Median")(Measurement.unapply)
-
   /** Write measurement data in TSV files
    * Creates new TSV files
    */
   def writeToCSV(stationMeasurements: Seq[Measurement], filePath: String) = {
+    implicit val measurementEncoder: HeaderEncoder[Measurement] = HeaderEncoder.caseEncoder("componentName",
+      "componentCaption", "measurementUnit", "measurementTechniquePrinciple"
+      , "year2005Mean", "year2005Median")(Measurement.unapply)
     val csvFile = new File(filePath)
     val out = new PrintWriter(csvFile)
     val writer = out.asCsvWriter[Measurement](rfc.withHeader("componentName", "componentCaption", "measurementUnit"
@@ -120,11 +118,12 @@ object ExtractData extends App {
     writer.write(stationMeasurements).close()
   }
 
-  //
+
   for (i <- stations.indices) {
     val station = stationNodes.filter(_ \ "@Id" exists (_.text.contains(stations(i).stationName))) \ "measurement_configuration"
     val stationMeasurements = station.map(node => fromXMLtoMeasures(node))
     writeToCSV(stationMeasurements,destTSVFilePaths(i))
   }
+
 
 }
